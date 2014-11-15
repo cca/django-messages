@@ -9,7 +9,7 @@ from django.core.urlresolvers import reverse
 from django.conf import settings
 
 from django_messages.models import Message
-from django_messages.forms import ComposeForm
+from django_messages.forms import ComposeForm, ComposeGroupForm
 from django_messages.utils import format_quote, get_user_model, get_username_field
 
 User = get_user_model()
@@ -87,6 +87,39 @@ def compose(request, recipient=None, form_class=ComposeForm,
         if recipient is not None:
             recipients = [u for u in User.objects.filter(**{'%s__in' % get_username_field(): [r.strip() for r in recipient.split('+')]})]
             form.fields['recipient'].initial = recipients
+    return render_to_response(template_name, {
+        'form': form,
+    }, context_instance=RequestContext(request))
+
+@login_required
+def compose_group(request, groupname=None, form_class=ComposeGroupForm,
+        template_name='django_messages/compose.html', success_url=None, recipient_filter=None):
+    """
+    Displays and handles the ``form_class`` form to compose new messages TO GROUPS
+    identified by e.g. `group-offering-12345` or `group-world-632`.
+    Required Arguments: None
+    Optional Arguments:
+        ``groupname``: group name
+        ``form_class``: the form-class to use
+        ``template_name``: the template to use
+        ``success_url``: where to redirect after successfull submission
+    """
+    if request.method == "POST":
+        sender = request.user
+        form = form_class(request.POST)
+        if form.is_valid():
+            form.save(sender=request.user)
+            messages.info(request, _(u"Message successfully sent."))
+            if success_url is None:
+                success_url = reverse('messages_inbox')
+            if 'next' in request.GET:
+                success_url = request.GET['next']
+            return HttpResponseRedirect(success_url)
+    else:
+        form = form_class()
+        if groupname is not None:
+            # recipients = [profile.user.username for profile in offering.students.all()]
+            form.fields['recipient'].initial = groupname
     return render_to_response(template_name, {
         'form': form,
     }, context_instance=RequestContext(request))
